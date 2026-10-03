@@ -269,6 +269,8 @@
   footer a { color: var(--ink-soft); }
   footer a:hover { color: var(--ink); }
 </style>
+<!-- Pont avec la salle de jeux (dchirez.fr/games/) : facultatif, le jeu tourne sans. -->
+<script src="/games/pont-hub.js"></script>
 </head>
 <body>
 <div class="page">
@@ -2529,11 +2531,34 @@ for (const key of Object.keys(POWERUPS)) {
 
 /* ------------------------------ boucle ------------------------------- */
 
+/* La salle de jeux est tenue au courant depuis la boucle, en observant les
+   changements d'état : le moteur reste identique à la version JavaFX. */
+const Hub = window.HubJeux || null;
+if (Hub && Hub.sonCoupe()) sound.muted = true;
+let statutPrecedent = game.status;
+function signalerAuHub() {
+  const st = game.status;
+  if (!Hub || st === statutPrecedent) return;
+  statutPrecedent = st;
+  const niveau = Math.min(game.levelIndex + 1, LEVELS.length);
+  if (game.mode === 'SOLO') {
+    const p = game.players[0], score = p ? p.score : 0;
+    const records = { niveau: [niveau, 'max'], score: [score, 'max'] };
+    if (st === 'LEVEL_CLEARED') Hub.fait('bomberman', null, ['niveau', Math.min(niveau + 1, LEVELS.length)]);
+    else if (st === 'GAME_OVER') Hub.partie('bomberman', { issue: 'defaite', detail: 'Campagne · niveau ' + niveau + '/' + LEVELS.length + ' · ' + score + ' pts', records });
+    else if (st === 'VICTORY') Hub.partie('bomberman', { issue: 'victoire', detail: 'Campagne terminée · ' + score + ' pts', records, faits: ['campagne'] });
+  } else if (st === 'ROUND_OVER' && game.matchOver) {
+    const w = game.roundWinner;
+    Hub.partie('bomberman', { issue: 'fin', detail: 'Duel · ' + (w ? w.name + ' gagne ' : '') + game.players.map(q => q.roundsWon).join('-'), faits: ['duel'] });
+  }
+}
+
 let last = 0;
 function frame(now) {
   const dt = last ? (now - last) / 1000 : 1 / 60;
   last = now;
   game.update(dt);
+  signalerAuHub();
   render(g, game);
   requestAnimationFrame(frame);
 }
